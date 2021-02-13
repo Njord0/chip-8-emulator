@@ -67,7 +67,7 @@ impl Proc {
             i += 2;
         }
 
-        i = 0x0;
+        i = 0x50;
         // add font at beginning of memory
         for j in FONT {
             self.memory[i] = *j;
@@ -337,7 +337,9 @@ impl Proc {
                 };
             },
 
-            _ => {},
+            _ => {
+                panic!("Unknow opcode: {:#04x}", i);
+            },
         }
 
     }

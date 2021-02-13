@@ -13,6 +13,5 @@ This is a simple rom that display "0123" to screen and then wait for a keypress
 ## TO-DO
 * Implement timers
 * Keypad (Keyboard) support
-* Audio sound
-* Re-map font set to correct address
+* Audio
 * ...
