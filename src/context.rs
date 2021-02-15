@@ -1,11 +1,12 @@
 extern crate sdl2; 
 
-pub struct Display {
+pub struct Sdl {
     pub sdl_context: sdl2::Sdl,
     window_canvas: sdl2::render::WindowCanvas,
+    pub timer: sdl2::TimerSubsystem,
 }
 
-impl Display {
+impl Sdl {
     pub fn new(title: &str, width: u32, height: u32) -> Self {
 
         let sdl_context = match sdl2::init() {
@@ -28,16 +29,28 @@ impl Display {
             Err(s) => panic!("{:?}", s)
         };
 
-        let a = Display {
+        let t = match sdl_context.timer() {
+            Ok(t) => t,
+            Err(s) => panic!("{:?}", s)
+        };
+
+
+        let a = Sdl {
             sdl_context: sdl_context,
             window_canvas: canvas,
+            timer: t,
         };
+
 
         a
     }
 
     pub fn get_canvas(&mut self) -> &mut sdl2::render::WindowCanvas {
         &mut self.window_canvas
+    }
+
+    pub fn get_ticks(&mut self) -> u32 {
+        self.timer.ticks()
     }
 
 }

@@ -1,6 +1,6 @@
 extern crate sdl2;
 
-mod screen;
+mod context;
 mod emulator; 
 
 use emulator::Proc;
@@ -53,16 +53,12 @@ fn main() {
 
     proc.load_program(&a);
 
-    let mut display = screen::Display::new("chip-8", 64*8, 32*8);
-    let mut event_pump = display.sdl_context.event_pump().unwrap();
-    
-    let canvas = display.get_canvas();
-    canvas.set_draw_color(sdl2::pixels::Color::RGB(0, 0, 0));
-    canvas.clear();
-    canvas.present();
+    let mut context = context::Sdl::new("chip-8", 64*8, 32*8);
+    let mut event_pump = context.sdl_context.event_pump().unwrap();
 
     loop {
-        
+        let start_time = context.get_ticks();
+
         for event in event_pump.poll_iter() {
             match event {
                 Event::Quit {..} |
@@ -76,26 +72,32 @@ fn main() {
 
         proc.run(&mut event_pump);
 
-        //proc.dump_regs();
-
         let a = proc.get_framebuffer();
-        canvas.clear();
+        {
+            let canvas = context.get_canvas();
+            canvas.clear();
 
-        canvas.set_draw_color(sdl2::pixels::Color::RGB(255, 255, 255));
+            canvas.set_draw_color(sdl2::pixels::Color::RGB(255, 255, 255));
 
-        for i in 0..64 {
-            for j in 0..32 {
-                if a[(j*64) + i] == 1 {
-                    if let Err(s) = canvas.fill_rect(sdl2::rect::Rect::new((i * 8) as i32, (j*8) as i32, 8, 8)) {
-                        println!("{:?}", s);
+            for i in 0..64 {
+                for j in 0..32 {
+                    if a[(j*64) + i] == 1 {
+                        if let Err(s) = canvas.fill_rect(sdl2::rect::Rect::new((i * 8) as i32, (j*8) as i32, 8, 8)) {
+                            println!("{:?}", s);
+                        }
+     
                     }
- 
                 }
             }
+            canvas.set_draw_color(sdl2::pixels::Color::RGB(0, 0, 0));
+
+            canvas.present();
         }
-        canvas.set_draw_color(sdl2::pixels::Color::RGB(0, 0, 0));
 
-        canvas.present();
+        let time = context.get_ticks() - start_time;
 
+        if 1000/60 > time {
+            context.timer.delay(1000/60 - time);
+        }
     }
 }
