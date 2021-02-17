@@ -10,20 +10,27 @@ cargo run test/test.ch8
 `test/test.ch8` can be replaced by any valid ch8 ROM
 This is a simple rom that display "0123" to screen and then wait for a keypress
 
-Chip-8-keypad become: (azerty layout)
-|1|2|3|C|  |&|é|"|'|
-|-|-|-|-|  |-|-|-|-|
-|4|5|6|D|  |a|z|e|r|
-|7|8|9|E|  |q|s|d|f|
-|A|0|B|F|  |w|x|c|v|
+Chip-8-keypad:
+|1|2|3|C|  
+|-|-|-|-|
+|4|5|6|D|
+|7|8|9|E|
+|A|0|B|F|
 
+become (azerty layout):
+
+|&|é|"|'|
+|-|-|-|-|
+|a|z|e|r|
+|q|s|d|f|
+|w|x|c|v|
 
 ## Pong game
-[](images/pong.png)
+![](images/pong.png)
 
 
 ## Tetris
-[](images/tetris.png)
+![](images/tetris.png)
 
 
 ## TO-DO
