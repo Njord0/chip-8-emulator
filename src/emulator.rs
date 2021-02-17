@@ -2,7 +2,6 @@ use sdl2::EventPump;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 
-
 const FONT: &[u8] = &[
     0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
     0x20, 0x60, 0x20, 0x20, 0x70, // 1
@@ -23,14 +22,16 @@ const FONT: &[u8] = &[
 ];
 
 pub struct Proc {
-    registers_g: [u8; 16],
-    reg_i: u16,
-    reg_dt: u8,
-    reg_st: u16,
-    pc: u16,
-    sp: u8,
+    registers_g: [u8; 16], // general purpose registers
+    reg_i: u16,            // I register
+    reg_dt: u8,            // delay timer
+    reg_st: u16,           // sound timer
+    pc: u16,               // program counter
+    sp: u16,                // stack pointer
     memory: [u8; 4096],
-    framebuffer: [u8; 64*32]
+    framebuffer: [u8; 64*32],
+    key: [u8; 16],
+    pub timers_last: u32
 }
 
 impl Proc {
@@ -41,9 +42,11 @@ impl Proc {
             reg_dt: 0,
             reg_st: 0,
             pc: 0x200,
-            sp: 0,
+            sp: 4000,
             memory: [0; 4096],
-            framebuffer: [0; 64*32]
+            framebuffer: [0; 64*32],
+            key: [0; 16],
+            timers_last: 0
         }
     }
 
@@ -85,17 +88,64 @@ impl Proc {
 
     pub fn get_framebuffer(&self) -> &[u8] {&self.framebuffer}
 
+    pub fn update_key(&mut self, event: &mut EventPump) {
+        for event in event.poll_iter() {
+            match event {
+                Event::KeyDown { keycode: Some(x), ..} => {
+                    match x {
+                        Keycode::Num1 => self.key[0] = 1,
+                        Keycode::Num2 => self.key[1] = 1,
+                        Keycode::Num3 => self.key[2] = 1, 
+                        Keycode::Num4 => self.key[3] = 1,
+                        Keycode::A => self.key[4] = 1,
+                        Keycode::Z => self.key[5] = 1,
+                        Keycode::E => self.key[6] = 1,
+                        Keycode::R => self.key[7] = 1,
+                        Keycode::Q => self.key[8] = 1,
+                        Keycode::S => self.key[9] = 1,
+                        Keycode::D => self.key[10] = 1,
+                        Keycode::F => self.key[11] = 1,
+                        Keycode::W => self.key[12] = 1,
+                        Keycode::X => self.key[13] = 1,
+                        Keycode::C => self.key[14] = 1,
+                        Keycode::V => self.key[15] = 1,
+
+                        Keycode::Escape => panic!("exit"),
+
+                    _ => {} 
+                    };
+                },
+                _ => {}
+            };
+
+        }
+    }
+
+    pub fn dec_timers(&mut self) {
+        if self.reg_dt > 0 {
+            self.reg_dt -= 1;
+        }
+
+        if self.reg_st > 0 {
+            self.reg_st -= 1;
+        }
+    }
+
 
     pub fn run(&mut self, event: &mut EventPump) {
         let i = self.next_instruction();
 
-        match i & 0xF000 {
-            0x0000 if i == 0x00E0 => {
-                println!("CLS");
+        match i & 0xF000 { 
+            0x0000 if i == 0x00E0 => { // CLS
+                for i in 0..2048 {
+                    self.framebuffer[i] = 0;
+                }
             },
 
-            0x0000 if i == 0x00E0 => {
-                println!("RET");
+            0x0000 if i == 0x00EE => { // RET
+                self.pc = u16::from_be_bytes([self.memory[(self.sp) as usize],
+                                            self.memory[(self.sp-1) as usize]]);
+                self.sp -= 2;
             },
 
             0x1000 => { // JP addr
@@ -103,10 +153,9 @@ impl Proc {
             },
 
             0x2000 => { // CALL addr
-                self.memory[self.sp as usize] = self.pc.to_be_bytes()[0];
-                self.memory[self.sp as usize +1] = self.pc.to_be_bytes()[1];
-
                 self.sp += 2;
+                self.memory[self.sp as usize] = self.pc.to_be_bytes()[0];
+                self.memory[self.sp as usize -1] = self.pc.to_be_bytes()[1];
 
                 self.pc = i & 0x0FFF;
             },
@@ -148,52 +197,55 @@ impl Proc {
                 let x = (i >> 8) & 0xF;
                 let k = i & 0xFF;
 
-                self.registers_g[x as usize] += k as u8;
+                let result = self.registers_g[x as usize] as u16 + k;
+
+                self.registers_g[x as usize] = result as u8;
             },
 
             0x8000 => { // Some math here
                 let x = (i >> 8) & 0xF;
                 let y = (i >> 4) & 0xF;
 
-
                 match i & 0xF {
                     0 => self.registers_g[x as usize] = self.registers_g[y as usize],
                     1 => {
                         self.registers_g[x as usize] = 
-                            self.registers_g[y as usize] | self.registers_g[x as usize];
+                            self.registers_g[x as usize] | self.registers_g[y as usize];
                     },
 
                     2 => {
                         self.registers_g[x as usize] = 
-                            self.registers_g[y as usize] & self.registers_g[x as usize];
+                            self.registers_g[x as usize] & self.registers_g[y as usize];
                     },
                     
                     3 => {
                         self.registers_g[x as usize] =
-                            self.registers_g[y as usize] ^ self.registers_g[x as usize];
+                            self.registers_g[x as usize] ^ self.registers_g[y as usize];
                     },
 
                     4 => {
-                        if (self.registers_g[y as usize] + self.registers_g[x as usize]) as u16 > 255 {
+                        let result = self.registers_g[x as usize] as u16 + self.registers_g[y as usize] as u16;
+
+                        if result > 255 {
+                            self.registers_g[15] = 1;
+                        }     
+                        else {
+                            self.registers_g[15] = 0;
+                        }
+
+                        self.registers_g[x as usize] = result as u8;
+                    },
+
+                    5 => {
+
+                        if self.registers_g[x as usize] > self.registers_g[y as usize] {
                             self.registers_g[15] = 1;
                         }
                         else {
                             self.registers_g[15] = 0;
                         }
                         self.registers_g[x as usize] =
-                            self.registers_g[y as usize] + self.registers_g[x as usize];                    
-                    },
-
-                    5 => {
-                        if self.registers_g[x as usize] - self.registers_g[y as usize] > 0 {
-                            self.registers_g[15] = 1;
-                        }
-                        else {
-                            self.registers_g[15] = 0;
-                        }
-
-                        self.registers_g[x as usize] = 
-                            self.registers_g[x as usize] - self.registers_g[y as usize];                    
+                            self.registers_g[x as usize].wrapping_sub(self.registers_g[y as usize]);
                     },
 
                     6 => {
@@ -203,7 +255,7 @@ impl Proc {
                     },
 
                     7 => {
-                        if self.registers_g[y as usize] - self.registers_g[x as usize] > 0 {
+                        if self.registers_g[y as usize] > self.registers_g[x as usize] {
                             self.registers_g[15] = 1;
                         }
                         else {
@@ -211,11 +263,11 @@ impl Proc {
                         }
 
                         self.registers_g[x as usize] = 
-                            self.registers_g[y as usize] - self.registers_g[x as usize];
+                            self.registers_g[y as usize].wrapping_sub(self.registers_g[x as usize]);
                     },
 
                     0xE => {
-                        self.registers_g[15] = 1;
+                        self.registers_g[15] = (self.registers_g[x as usize] >> 7) & 0xF;
                         self.registers_g[x as usize] = self.registers_g[x as usize] << 1;
                     }
                     _ => {}
@@ -247,7 +299,7 @@ impl Proc {
 
             0xD000 => { // DRW Vx, Vy, nibble
                 let x = self.registers_g[((i >> 8) & 0x0F) as usize] as u16;
-                let y = self.registers_g[((i >> 4) & 0x00F) as usize] as u16;
+                let y = self.registers_g[((i >> 4) & 0x0F) as usize] as u16;
                 let height = i & 0xF;
 
                 self.registers_g[15] = 0;
@@ -256,19 +308,35 @@ impl Proc {
                     
                     for xline in 0..8 {
                         if pixel & (0x80 >> xline) != 0 {
-                            self.framebuffer[(x+xline + ((y+yline)*64)) as usize] = 1;
+                            if x+xline + (y+yline)*64 < 2048 {
+                                self.framebuffer[(x+xline + (y+yline)*64) as usize] ^= 1;
+                                if self.framebuffer[(x+xline + (y+yline)*64) as usize] == 0 {
+                                    self.registers_g[15] = 1;
+                                }
+                            }
                         }
                     }
                 }
             },
 
             0xE000 => {
+                let x = (i >> 8) & 0xF;
                 match i & 0x00FF {
                     0x9E => { // SKP Vx
-                        // todo
+                        self.update_key(event);
+                        if self.key[x as usize] == 1 {
+                            self.pc += 2;
+                            self.key[x as usize] = 0;
+                        }
+
                     },
 
                     0xA1 => { //SNKP Vx
+                        self.update_key(event);
+                        if self.key[x as usize] != 1 {
+                            self.pc += 2;
+                        }
+                        self.key[x as usize] = 0;
 
                     },
                     _ => {}
@@ -280,15 +348,53 @@ impl Proc {
                 match i & 0x00FF {
                     0x07 => { // LD Vx, DT
 
-                        self.registers_g[x as usize] = self.reg_dt;
+                        self.registers_g[x as usize] = self.reg_dt.into();
                     },
 
                     0x0A => { // LD Vx, K
-                        println!("Infinite loop here");
                         loop {
                             for event in event.poll_iter() {
                                 match event {
-                                    Event::KeyDown { keycode: Some(Keycode::Q), ..} => {return;},
+                                    Event::KeyDown { keycode: Some(y), ..} => {
+                                        match y {
+                                            Keycode::Num1 => 
+                                                self.registers_g[x as usize] = 0,
+                                            Keycode::Num2 => 
+                                                self.registers_g[x as usize] = 1,
+                                            Keycode::Num3 => 
+                                                self.registers_g[x as usize] = 2,
+                                            Keycode::Num4 => 
+                                                self.registers_g[x as usize] = 3,
+                                            Keycode::A => 
+                                                self.registers_g[x as usize] = 4,
+                                            Keycode::Z => 
+                                                self.registers_g[x as usize] = 5,
+                                            Keycode::E => 
+                                                self.registers_g[x as usize] = 6,
+                                            Keycode::R => 
+                                                self.registers_g[x as usize] = 7,
+                                            Keycode::Q => 
+                                                self.registers_g[x as usize] = 8,
+                                            Keycode::S => 
+                                                self.registers_g[x as usize] = 9,
+                                            Keycode::D => 
+                                                self.registers_g[x as usize] = 10,
+                                            Keycode::F => 
+                                                self.registers_g[x as usize] = 11,
+                                            Keycode::W => 
+                                                self.registers_g[x as usize] = 12,
+                                            Keycode::X => 
+                                                self.registers_g[x as usize] = 13,
+                                            Keycode::C => 
+                                                self.registers_g[x as usize] = 14,
+                                            Keycode::V => 
+                                                self.registers_g[x as usize] = 15,
+                                                                                        
+                                            _ => {}
+                                        };
+
+                                        return;
+                                    },
                                     _ => {}
                                 };
                             }
@@ -296,7 +402,7 @@ impl Proc {
                     },
 
                     0x15 => { // LD DT, Vx
-                        self.reg_dt = self.registers_g[x as usize];
+                        self.reg_dt = self.registers_g[x as usize] as u8;
                     },
 
                     0x18 => { // LD ST, Vx
@@ -308,25 +414,25 @@ impl Proc {
                     },
 
                     0x29 => { // LD F, Vx
-                        // todo
+                        self.reg_i = (self.registers_g[x as usize] * 5 + 0x50).into();
                     },
 
                     0x33 => { // LD B, Vx
                         let y = self.registers_g[x as usize];
-                        self.memory[self.reg_i as usize] = y / 100;
-                        self.memory[self.reg_i as usize+1] = y / 10;
-                        self.memory[self.reg_i as usize+2] = y;
+                        self.memory[self.reg_i as usize] = (y / 100) as u8;
+                        self.memory[self.reg_i as usize+1] = (y / 10) as u8;
+                        self.memory[self.reg_i as usize+2] = y as u8;
                     },
 
                     0x55 => { // LD [i], Vx
-                        for j in 0..16 {
+                        for j in 0..x {
                             self.memory[(self.reg_i+j) as usize] =
-                                self.registers_g[j as usize];
+                                self.registers_g[j as usize] as u8;
                         }
                     },
 
-                    0x65 => {
-                        for j in 0..16 {
+                    0x65 => { // LD Vx [I]
+                        for j in 0..x {
                             self.registers_g[j as usize] = 
                                 self.memory[(self.reg_i+j) as usize];
                         }
@@ -338,7 +444,10 @@ impl Proc {
             },
 
             _ => {
-                panic!("Unknow opcode: {:#04x}", i);
+                println!("Unknow opcode: {:#04x}", i);
+                loop {
+
+                }
             },
         }
 

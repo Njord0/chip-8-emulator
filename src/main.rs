@@ -7,8 +7,6 @@ use emulator::Proc;
 
 use std::fs::File;
 use std::io::prelude::*;
-use sdl2::event::Event;
-use sdl2::keyboard::Keycode;
 
 
 fn get_file_content(mut file: File) -> Result<Vec<u16>, String> {
@@ -57,19 +55,8 @@ fn main() {
     let mut event_pump = context.sdl_context.event_pump().unwrap();
 
     loop {
-        let start_time = context.get_ticks();
-
-        for event in event_pump.poll_iter() {
-            match event {
-                Event::Quit {..} |
-                Event::KeyDown { keycode: Some(Keycode::Q), .. } => {
-                    return
-                },
-                _ => {}
-            }
-        }
-
-
+        
+        proc.update_key(&mut event_pump);
         proc.run(&mut event_pump);
 
         let a = proc.get_framebuffer();
@@ -94,10 +81,11 @@ fn main() {
             canvas.present();
         }
 
-        let time = context.get_ticks() - start_time;
-
-        if 1000/60 > time {
-            context.timer.delay(1000/60 - time);
+        if context.get_ticks() - proc.timers_last > 1000/60 {
+            proc.dec_timers();
+            proc.timers_last = context.get_ticks();
         }
+
+        
     }
 }
